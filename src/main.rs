@@ -1,13 +1,11 @@
 use ethers::{
-    core::types::{Address, Filter},
+    core::types::{Address, Filter, Bytes},
     providers::{Http, Middleware, Provider},
 };
 use eyre::Result;
 use std::sync::Arc;
 use ethers::abi::{decode, Uint};
-use ethers::abi::ethabi::Bytes;
 use ethers::abi::ParamType::{Address as ParamAddress, Uint as AbiUint};
-use ethers::types::H256;
 
 const HTTP_URL: &str = "https://rpc.flashbots.net";
 const ROUND_ADDRESS: &str = "0x746b951FA10a89d6cbe70d4EE23531f907B58Bc0";
@@ -41,10 +39,10 @@ async fn main() -> Result<()> {
             let vote = Vote {
                 token: decoded[0].clone().into_address().unwrap_or_default(),
                 amount: decoded[1].clone().into_uint().unwrap_or_default(),
-                voter: Default::default(),
+                voter: Address::from(log.topics[1]),
                 grant_address: decoded[2].clone().into_address().unwrap_or_default(),
-                project_id: vec![],
-                round_address: Default::default(),
+                project_id: Bytes::from(log.topics[2].as_bytes().to_vec()),
+                round_address: Address::from(log.topics[3]),
             };
             votes.push(vote);
         };
