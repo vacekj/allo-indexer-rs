@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ethers = "1.0.2"
+chrono = "0.4.31"
+ethers = { version = "2.0.1", default-features = false, features = ["abigen", "ethers-solc", "eip712", "rustls", "legacy"] }
 eyre = "0.6.8"
-tokio = { features = ["macros"] }
+tokio = { version = "1.33.0", features = ["macros"] }
