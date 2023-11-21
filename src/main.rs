@@ -1,22 +1,22 @@
+mod ipfs;
 mod project;
 mod round;
-mod ipfs;
 
+use crate::ipfs::ipfs_get;
+use crate::round::index_round_factory;
+use ethers::abi::ParamType::{Address as ParamAddress, Uint as AbiUint};
+use ethers::abi::{decode, Uint};
+use ethers::prelude::*;
+use ethers::types::Chain::Optimism;
 use ethers::{
-    core::types::{Address, Filter, Bytes},
+    core::types::{Address, Bytes, Filter},
     providers::{Http, Middleware, Provider},
 };
-use ethers::prelude::*;
 use eyre::Result;
-use std::sync::Arc;
-use ethers::abi::{decode, Uint};
-use ethers::abi::ParamType::{Address as ParamAddress, Uint as AbiUint};
-use ethers::types::Chain::Optimism;
 use sea_orm::{Database, DatabaseConnection};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPoolOptions;
-use crate::ipfs::ipfs_get;
-use crate::round::index_round_factory;
+use std::sync::Arc;
 
 const HTTP_URL: &str = "https://opt-mainnet.g.alchemy.com/v2/BUyiIrMBAy0UGmIASaEopcSET3Ce_Tb_";
 
@@ -42,14 +42,19 @@ pub struct IpfsValue {
 async fn main() -> Result<()> {
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(DB_URL).await?;
-
+        .connect(DB_URL)
+        .await?;
 
     let mut provider = Provider::<Http>::try_from(HTTP_URL)?;
     provider.set_chain(Optimism);
     let client = Arc::new(provider);
 
-    let value = ipfs_get(pool, "bafkreidsrwwsfx273vry45noowvniqxbcqrwcnsrxdfdbm56qcsqzvqvvy".into()).await;
+    let value =
+        ipfs_get(
+            pool,
+            "bafkreih2t2iwmgr7lqghhvtlntfwfxarqpzja3f44oer7gndmfd72gculi".into(),
+        )
+        .await;
 
     dbg!(value);
 
