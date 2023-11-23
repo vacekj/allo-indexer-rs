@@ -4,6 +4,7 @@ Index the Allo protocol on-chain events blazingly fast
 # Architecture
 - The only storage backend for the whole indexer is a single PostgreSQL db. We use it to store both typical values, JSON & use it as a key-value store
 - Token prices are indexed from on-chain AMMs, no need for an external service
+- This also obviates the need for block time estimates.
 - Passport is ingested in batch mode
 - The only dependency is an RPC and a DB connection
 - We use Supabase as the default host for the DB, making the data easily publicly queryable
