@@ -4,18 +4,15 @@ mod round;
 
 // use crate::ipfs::ipfs_get;
 use crate::round::index_round_factory;
-use ethers::abi::ParamType::{Address as ParamAddress, Uint as AbiUint};
-use ethers::abi::{decode, Uint};
+use ethers::abi::Uint;
 use ethers::prelude::*;
 use ethers::types::Chain::Optimism;
 use ethers::{
-    core::types::{Address, Bytes, Filter},
+    core::types::{Address, Bytes},
     providers::{Http, Middleware, Provider},
 };
 use eyre::Result;
-use sea_orm::{Database, DatabaseConnection};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 
 const HTTP_URL: &str = "https://opt-mainnet.g.alchemy.com/v2/BUyiIrMBAy0UGmIASaEopcSET3Ce_Tb_";
@@ -30,8 +27,6 @@ struct Vote {
     round_address: Address,
 }
 
-// const DB_URL: &str = §env!("DATABASE_URL");
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct IpfsValue {
     hash: String,
@@ -40,11 +35,6 @@ pub struct IpfsValue {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // let pool = PgPoolOptions::new()
-    //     .max_connections(5)
-    //     .connect(DB_URL)
-    //     .await?;
-
     let mut provider = Provider::<Http>::try_from(HTTP_URL)?;
     provider.set_chain(Optimism);
     let client = Arc::new(provider);
@@ -54,32 +44,6 @@ async fn main() -> Result<()> {
         None,
     )
     .await?;
-
-    // let filter = Filter::new()
-    //     .address(ROUND_ADDRESS.parse::<Address>()?)
-    //     .event("Voted(address,uint256,address,address,bytes32,address)")
-    //     .from_block(16530241);
-    // let logs = client.get_logs(&filter).await?;
-    // println!("{} votes found!", logs.iter().len());
-    //
-    // let mut votes = vec![];
-    // for log in logs.iter() {
-    //     let types = vec![ParamAddress, AbiUint(256), ParamAddress];
-    //     let decoded = decode(&types, &log.data);
-    //     if let Ok(decoded) = decoded {
-    //         let vote = Vote {
-    //             token: decoded[0].clone().into_address().unwrap_or_default(),
-    //             amount: decoded[1].clone().into_uint().unwrap_or_default(),
-    //             voter: Address::from(log.topics[1]),
-    //             grant_address: decoded[2].clone().into_address().unwrap_or_default(),
-    //             project_id: Bytes::from(log.topics[2].as_bytes().to_vec()),
-    //             round_address: Address::from(log.topics[3]),
-    //         };
-    //         votes.push(vote);
-    //     };
-    // }
-    //
-    // dbg!(votes);
 
     Ok(())
 }
