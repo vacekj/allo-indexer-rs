@@ -28,7 +28,7 @@ pub async fn index_round_factory(
     provider: &Arc<Provider<Http>>,
     round_factory_address: Address,
     from_block: Option<u64>,
-) -> Result<()> {
+) -> Result<Vec<Round>> {
     let filter = Filter::new()
         .address(round_factory_address)
         .event("RoundCreated(address,address,address)")
@@ -52,10 +52,9 @@ pub async fn index_round_factory(
     let results = join_all(futures)
         .await
         .into_iter()
+        .map(|val| val.unwrap())
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-
-    dbg!(&results);
 
     println!(
         "indexed {} rounds on chain {}",
@@ -63,7 +62,7 @@ pub async fn index_round_factory(
         provider.get_chainid().await?
     );
 
-    Ok(())
+    Ok(results)
 }
 
 pub async fn index_round(provider: Arc<Provider<Http>>, round_address: &Address) -> Result<Round> {
@@ -96,8 +95,6 @@ pub async fn index_round(provider: Arc<Provider<Http>>, round_address: &Address)
         // round_start_time,
         // round_end_time,
     };
-
-    dbg!(&round);
 
     Ok(round)
 }
