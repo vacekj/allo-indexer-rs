@@ -2,7 +2,7 @@ mod ipfs;
 mod project;
 mod round;
 
-use crate::ipfs::ipfs_get;
+// use crate::ipfs::ipfs_get;
 use crate::round::index_round_factory;
 use ethers::abi::ParamType::{Address as ParamAddress, Uint as AbiUint};
 use ethers::abi::{decode, Uint};
@@ -30,7 +30,7 @@ struct Vote {
     round_address: Address,
 }
 
-const DB_URL: &str = env!("DATABASE_URL");
+// const DB_URL: &str = §env!("DATABASE_URL");
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct IpfsValue {
@@ -40,25 +40,20 @@ pub struct IpfsValue {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(DB_URL)
-        .await?;
+    // let pool = PgPoolOptions::new()
+    //     .max_connections(5)
+    //     .connect(DB_URL)
+    //     .await?;
 
     let mut provider = Provider::<Http>::try_from(HTTP_URL)?;
     provider.set_chain(Optimism);
     let client = Arc::new(provider);
-
-    let value =
-        ipfs_get(
-            pool,
-            "bafkreih2t2iwmgr7lqghhvtlntfwfxarqpzja3f44oer7gndmfd72gculi".into(),
-        )
-        .await;
-
-    dbg!(value);
-
-    // index_round_factory(&client, "0x04E753cFB8c8D1D7f776f7d7A033740961b6AEC2".parse::<Address>()?, None).await?;
+    index_round_factory(
+        &client,
+        "0x04E753cFB8c8D1D7f776f7d7A033740961b6AEC2".parse::<Address>()?,
+        None,
+    )
+    .await?;
 
     // let filter = Filter::new()
     //     .address(ROUND_ADDRESS.parse::<Address>()?)
