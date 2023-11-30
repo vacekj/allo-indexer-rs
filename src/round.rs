@@ -57,7 +57,11 @@ pub async fn index_round_factory(
 
     dbg!(&results);
 
-    println!("indexed {} rounds", results.len());
+    println!(
+        "indexed {} rounds on chain {}",
+        results.len(),
+        provider.get_chainid().await?
+    );
 
     Ok(())
 }
