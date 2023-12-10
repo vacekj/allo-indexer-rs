@@ -1,3 +1,5 @@
+#![allow(unused_imports, dead_code)]
+
 mod ipfs;
 mod project;
 mod round;

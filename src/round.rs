@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+
 use chrono::{DateTime, TimeZone, Utc};
 use ethers::prelude::*;
 use eyre::Result;
