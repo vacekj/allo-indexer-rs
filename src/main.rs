@@ -1,5 +1,6 @@
 #![allow(unused_imports, dead_code)]
 
+mod handle_event;
 mod ipfs;
 mod project;
 mod round;
