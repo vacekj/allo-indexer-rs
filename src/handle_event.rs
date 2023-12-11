@@ -62,7 +62,6 @@ pub fn handle_event<IpfsGetter: Fn(String) -> String>(event: Event, ipfs: IpfsGe
             project_id,
         } => {
             let metadata = ipfs(meta_ptr.pointer);
-            println!("Value: {}", metadata.to_string());
             Query::update()
                 .table(Project::Table)
                 .values([(Project::Metadata, metadata.into())])
