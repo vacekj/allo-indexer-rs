@@ -1,6 +1,8 @@
 #![allow(unused_imports, dead_code)]
 
 mod event_handling;
+mod event_log;
+mod indexer;
 mod ipfs;
 mod project;
 mod round;
@@ -86,14 +88,13 @@ async fn main() -> Result<()> {
         },
     ];
 
-    let handles: Vec<_> =
-        chains
-            .iter()
-            .map(|obj| {
-                let chain_def_clone = obj.clone(); // Clone ChainDef for the task
-                task::spawn(async move { index_chain(&chain_def_clone).await.unwrap() })
-            })
-            .collect();
+    let handles: Vec<_> = chains
+        .iter()
+        .map(|obj| {
+            let chain_def_clone = obj.clone(); // Clone ChainDef for the task
+            task::spawn(async move { index_chain(&chain_def_clone).await.unwrap() })
+        })
+        .collect();
 
     let rounds = futures::future::join_all(handles).await;
     dbg!(rounds);

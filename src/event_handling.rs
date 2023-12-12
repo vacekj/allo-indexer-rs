@@ -1,7 +1,7 @@
 use sea_query::{Expr, Iden, PostgresQueryBuilder, Query};
 use tokio_postgres::{Client, Error, NoTls, Transaction};
 
-const DB_SCHEMA: &str = r#"
+pub const DB_SCHEMA: &str = r#"
    CREATE TABLE project (
      chain_id INTEGER NOT NULL,
      project_id VARCHAR NOT NULL,
@@ -19,6 +19,14 @@ enum Project {
     CreatedAtBlock,
     Metadata,
     Owners,
+}
+
+#[derive(Iden)]
+enum Round {
+    Table,
+    ChainId,
+    RoundAddress,
+    CreatedAtBlock,
 }
 
 // TODO use stricter types
@@ -45,21 +53,23 @@ pub enum EventPayload {
         project_id: String,
         owner: String,
     },
+    RoundCreated {
+        round_address: String,
+    },
 }
 
 pub struct MetaPtr {
-    pointer: String,
+    pub pointer: String,
 }
 
-pub type IpfsGetter = fn(String) -> String;
+pub type IpfsGetter = fn(&String) -> String;
 
 pub struct ChangeSet {
-    sql: String,
-    // TODO add other effects here, e.g. subscriptions: ...
+    pub sql: String,
 }
 
-pub fn event_to_changeset(event: Event, ipfs: IpfsGetter) -> ChangeSet {
-    match event.payload {
+pub fn event_to_changeset(event: &Event, ipfs: IpfsGetter) -> ChangeSet {
+    match &event.payload {
         EventPayload::ProjectCreated { project_id } => ChangeSet {
             sql: Query::insert()
                 .into_table(Project::Table)
@@ -80,7 +90,7 @@ pub fn event_to_changeset(event: Event, ipfs: IpfsGetter) -> ChangeSet {
             meta_ptr,
             project_id,
         } => {
-            let metadata = ipfs(meta_ptr.pointer);
+            let metadata = ipfs(&meta_ptr.pointer);
             ChangeSet {
                 sql: Query::update()
                     .table(Project::Table)
@@ -110,14 +120,26 @@ pub fn event_to_changeset(event: Event, ipfs: IpfsGetter) -> ChangeSet {
                 ),
             }
         }
+
+        EventPayload::RoundCreated { round_address } => ChangeSet {
+            sql: Query::insert()
+                .into_table(Round::Table)
+                .columns([Round::ChainId, Round::RoundAddress, Round::CreatedAtBlock])
+                .values_panic([
+                    event.chain_id.into(),
+                    round_address.into(),
+                    event.block_number.into(),
+                ])
+                .to_string(PostgresQueryBuilder),
+        },
     }
 }
 
 #[cfg(test)]
-mod unit_tests {
+mod tests {
     use super::*;
 
-    fn dummy_ipfs_getter(_cid: String) -> String {
+    fn dummy_ipfs_getter(_cid: &String) -> String {
         return "".to_string();
     }
 
@@ -133,7 +155,7 @@ mod unit_tests {
         };
 
         assert_eq!(
-            event_to_changeset(event, dummy_ipfs_getter).sql,
+            event_to_changeset(&event, dummy_ipfs_getter).sql,
             r#"INSERT INTO "project" ("chain_id", "project_id", "created_at_block") VALUES (1, 'proj-123', 4242)"#
         );
     }
@@ -151,10 +173,10 @@ mod unit_tests {
                 },
             },
         };
-        let ipfs_getter = |_cid: String| -> String { r#"{ "foo": "bar" }"#.to_string() };
+        let ipfs_getter = |_cid: &String| -> String { r#"{ "foo": "bar" }"#.to_string() };
 
         assert_eq!(
-            event_to_changeset(event, ipfs_getter).sql,
+            event_to_changeset(&event, ipfs_getter).sql,
             r#"UPDATE "project" SET "metadata" = E'{ \"foo\": \"bar\" }' WHERE "chain_id" = 1 AND "project_id" = 'proj-123'"#
         );
     }
@@ -172,7 +194,7 @@ mod unit_tests {
         };
 
         assert_eq!(
-            event_to_changeset(event, dummy_ipfs_getter).sql,
+            event_to_changeset(&event, dummy_ipfs_getter).sql,
             r#"UPDATE "project" SET "owners" = ("owners" || '["0x123"]') WHERE "chain_id" = 1 AND "project_id" = 'proj-123'"#
         );
     }
@@ -190,86 +212,26 @@ mod unit_tests {
         };
 
         assert_eq!(
-            event_to_changeset(event, dummy_ipfs_getter).sql,
+            event_to_changeset(&event, dummy_ipfs_getter).sql,
             r#"UPDATE "project" SET "owners" = ("owners" - '0x123') WHERE "chain_id" = 1 AND "project_id" = 'proj-123'"#
         );
     }
-}
 
-#[cfg(test)]
-mod integration_tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_project_created() -> Result<(), Error> {
-        let ipfs_getter = |_cid: String| -> String { "".to_string() };
-        let events = vec![Event {
+    #[test]
+    fn test_handle_contract_round_created() {
+        let event = Event {
             chain_id: 1,
             address: "0x123".to_string(),
             block_number: 4242,
-            payload: EventPayload::ProjectCreated {
-                project_id: "proj-123".to_string(),
+            payload: EventPayload::RoundCreated {
+                round_address: "0x123".to_string(),
             },
-        }];
+        };
 
-        let connection_string = "host=localhost user=postgres password=postgres";
-        let (mut client, connection) = tokio_postgres::connect(connection_string, NoTls).await?;
-        tokio::spawn(connection);
-        let transaction = client.transaction().await?;
-        transaction.batch_execute(DB_SCHEMA).await?;
-        for event in events {
-            let change_set = event_to_changeset(event, ipfs_getter);
-            transaction.simple_query(&change_set.sql).await?;
-        }
-        let rows = transaction
-            .query("SELECT JSON_AGG(project) #>> '{}' FROM project;", &[])
-            .await?;
-        let value: &str = rows[0].get(0);
-
-        insta::assert_yaml_snapshot!(value);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_project_created_and_metadata_updated() -> Result<(), Error> {
-        let ipfs_getter = |_cid: String| -> String { "{ \"foo\": \"bar\" }".to_string() };
-        let events = vec![
-            Event {
-                chain_id: 1,
-                address: "0x123".to_string(),
-                block_number: 4242,
-                payload: EventPayload::ProjectCreated {
-                    project_id: "proj-123".to_string(),
-                },
-            },
-            Event {
-                chain_id: 1,
-                address: "0x123".to_string(),
-                block_number: 4242,
-                payload: EventPayload::MetadataUpdated {
-                    project_id: "proj-123".to_string(),
-                    meta_ptr: MetaPtr {
-                        pointer: "123".to_string(),
-                    },
-                },
-            },
-        ];
-
-        let connection_string = "host=localhost user=postgres password=postgres";
-        let (mut client, connection) = tokio_postgres::connect(connection_string, NoTls).await?;
-        tokio::spawn(connection);
-        let transaction = client.transaction().await?;
-        transaction.batch_execute(DB_SCHEMA).await?;
-        for event in events {
-            let change_set = event_to_changeset(event, ipfs_getter);
-            transaction.simple_query(&change_set.sql).await?;
-        }
-        let rows = transaction
-            .query("SELECT JSON_AGG(project) #>> '{}' FROM project;", &[])
-            .await?;
-        let value: &str = rows[0].get(0);
-
-        insta::assert_yaml_snapshot!(value);
-        Ok(())
+        let ChangeSet { sql } = event_to_changeset(&event, dummy_ipfs_getter);
+        assert_eq!(
+            sql,
+            r#"INSERT INTO "round" ("chain_id", "round_address", "created_at_block") VALUES (1, '0x123', 4242)"#
+        );
     }
 }
