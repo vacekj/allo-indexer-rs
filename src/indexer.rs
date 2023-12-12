@@ -17,7 +17,7 @@ fn process_event_log_chunk(
 
     let change_sets: Vec<ChangeSet> = events
         .iter()
-        .map(|event: &Event| -> ChangeSet { event_to_changeset(&event, ipfs_getter) })
+        .map(|event: &Event| -> ChangeSet { event_to_changeset(event, ipfs_getter) })
         .collect();
 
     (change_sets, next_event_index)
@@ -30,82 +30,30 @@ mod tests {
 
     const MAX_EVENTS_CHUNK_SIZE: usize = 2;
 
-    fn dummy_ipfs_getter(_cid: &String) -> String {
-        return "".to_string();
+    fn dummy_ipfs_getter(_cid: &str) -> String {
+        "".into()
     }
 
-    #[test]
-    fn test_process_event_log_chunk_returns_change_sets() {
-        let mut log = InMemoryEventLog { events: Vec::new() };
-        log.append(Event {
-            chain_id: 1,
-            address: "0x123".to_string(),
-            block_number: 4242,
-            payload: EventPayload::ProjectCreated {
-                project_id: "proj-123".to_string(),
-            },
-        });
-        log.append(Event {
-            chain_id: 1,
-            address: "0x123".to_string(),
-            block_number: 4242,
-            payload: EventPayload::MetadataUpdated {
-                project_id: "proj-123".to_string(),
-                meta_ptr: MetaPtr {
-                    pointer: "123".to_string(),
+    #[tokio::test]
+    async fn test_project_created() {
+        let ipfs_getter = |_cid: &str| -> String { "".to_string() };
+        let events =
+            vec![Event {
+                chain_id: 1,
+                address: "0x123".to_string(),
+                block_number: 4242,
+                payload: EventPayload::ProjectCreated {
+                    project_id: "proj-123".to_string(),
                 },
-            },
-        });
+            }];
+        let value = snapshot_test_events(events, ipfs_getter).await;
 
-        let start = 0;
-        // TODO make chunk size explicit; make process_event_log_chunk async
-        let ipfs_getter = |_cid: &String| -> String { "{ \"foo\": \"bar\" }".to_string() };
-        let (change_sets, _) =
-            process_event_log_chunk(&log, start, MAX_EVENTS_CHUNK_SIZE, ipfs_getter);
-
-        assert_eq!(
-            change_sets[0].sql,
-            r#"INSERT INTO "project" ("chain_id", "project_id", "created_at_block") VALUES (1, 'proj-123', 4242)"#
-        );
-        assert_eq!(
-            change_sets[1].sql,
-            r#"UPDATE "project" SET "metadata" = E'{ \"foo\": \"bar\" }' WHERE "chain_id" = 1 AND "project_id" = 'proj-123'"#
-        )
+        insta::assert_yaml_snapshot!(value.unwrap());
     }
 
     #[tokio::test]
-    async fn test_project_created() -> Result<(), Error> {
-        let ipfs_getter = |_cid: &String| -> String { "".to_string() };
-        let events = vec![Event {
-            chain_id: 1,
-            address: "0x123".to_string(),
-            block_number: 4242,
-            payload: EventPayload::ProjectCreated {
-                project_id: "proj-123".to_string(),
-            },
-        }];
-
-        let connection_string = "host=localhost user=postgres password=postgres";
-        let (mut client, connection) = tokio_postgres::connect(connection_string, NoTls).await?;
-        tokio::spawn(connection);
-        let transaction = client.transaction().await?;
-        transaction.batch_execute(DB_SCHEMA).await?;
-        for event in events {
-            let change_set = event_to_changeset(&event, ipfs_getter);
-            transaction.simple_query(&change_set.sql).await?;
-        }
-        let rows = transaction
-            .query("SELECT JSON_AGG(project) #>> '{}' FROM project;", &[])
-            .await?;
-        let value: &str = rows[0].get(0);
-
-        insta::assert_yaml_snapshot!(value);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_project_created_and_metadata_updated() -> Result<(), Error> {
-        let ipfs_getter = |_cid: &String| -> String { "{ \"foo\": \"bar\" }".to_string() };
+    async fn test_project_created_and_metadata_updated() {
+        let ipfs_getter = |_cid: &str| -> String { "{ \"foo\": \"bar\" }".to_string() };
         let events = vec![
             Event {
                 chain_id: 1,
@@ -127,22 +75,32 @@ mod tests {
                 },
             },
         ];
+        let value = snapshot_test_events(events, ipfs_getter).await;
 
+        insta::assert_yaml_snapshot!(value.unwrap());
+    }
+
+    async fn snapshot_test_events(
+        events: Vec<Event>,
+        ipfs_getter: IpfsGetter,
+    ) -> Result<String, Error> {
+        let mut event_log = InMemoryEventLog::new();
+        for event in events {
+            event_log.append(event);
+        }
         let connection_string = "host=localhost user=postgres password=postgres";
         let (mut client, connection) = tokio_postgres::connect(connection_string, NoTls).await?;
         tokio::spawn(connection);
         let transaction = client.transaction().await?;
         transaction.batch_execute(DB_SCHEMA).await?;
-        for event in events {
-            let change_set = event_to_changeset(&event, ipfs_getter);
-            transaction.simple_query(&change_set.sql).await?;
+        let (change_sets, _) =
+            process_event_log_chunk(&event_log, 0, MAX_EVENTS_CHUNK_SIZE, ipfs_getter);
+        for change in change_sets {
+            transaction.simple_query(&change.sql).await?;
         }
         let rows = transaction
             .query("SELECT JSON_AGG(project) #>> '{}' FROM project;", &[])
             .await?;
-        let value: &str = rows[0].get(0);
-
-        insta::assert_yaml_snapshot!(value);
-        Ok(())
+        Ok(rows[0].get(0))
     }
 }

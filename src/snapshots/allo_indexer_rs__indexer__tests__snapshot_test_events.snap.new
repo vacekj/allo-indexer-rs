@@ -1,0 +1,7 @@
+---
+source: src/indexer.rs
+assertion_line: 157
+expression: value
+---
+"[{\"chain_id\":1,\"project_id\":\"proj-123\",\"created_at_block\":4242,\"metadata\":null}]"
+

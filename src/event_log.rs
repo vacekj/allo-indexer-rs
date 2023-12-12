@@ -16,13 +16,20 @@ impl EventLog for InMemoryEventLog {
 
     fn range(&self, chunk_start: usize, chunk_length: usize) -> (&[Event], usize) {
         let desired_end = chunk_start + chunk_length;
-        let actual_end = if desired_end > self.events.len() {
-            self.events.len()
-        } else {
-            desired_end
-        };
+        let actual_end =
+            if desired_end > self.events.len() {
+                self.events.len()
+            } else {
+                desired_end
+            };
         let range = &self.events[chunk_start..actual_end];
         (range, actual_end)
+    }
+}
+
+impl InMemoryEventLog {
+    pub fn new() -> Self {
+        InMemoryEventLog { events: vec![] }
     }
 }
 

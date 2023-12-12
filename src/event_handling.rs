@@ -62,7 +62,7 @@ pub struct MetaPtr {
     pub pointer: String,
 }
 
-pub type IpfsGetter = fn(&String) -> String;
+pub type IpfsGetter = fn(&str) -> String;
 
 pub struct ChangeSet {
     pub sql: String,
@@ -139,20 +139,21 @@ pub fn event_to_changeset(event: &Event, ipfs: IpfsGetter) -> ChangeSet {
 mod tests {
     use super::*;
 
-    fn dummy_ipfs_getter(_cid: &String) -> String {
-        return "".to_string();
+    fn dummy_ipfs_getter(_cid: &str) -> String {
+        "".to_string()
     }
 
     #[test]
     fn test_handle_project_created() {
-        let event = Event {
-            chain_id: 1,
-            address: "0x123".to_string(),
-            block_number: 4242,
-            payload: EventPayload::ProjectCreated {
-                project_id: "proj-123".to_string(),
-            },
-        };
+        let event =
+            Event {
+                chain_id: 1,
+                address: "0x123".to_string(),
+                block_number: 4242,
+                payload: EventPayload::ProjectCreated {
+                    project_id: "proj-123".to_string(),
+                },
+            };
 
         assert_eq!(
             event_to_changeset(&event, dummy_ipfs_getter).sql,
@@ -173,7 +174,7 @@ mod tests {
                 },
             },
         };
-        let ipfs_getter = |_cid: &String| -> String { r#"{ "foo": "bar" }"#.to_string() };
+        let ipfs_getter = |_cid: &str| -> String { r#"{ "foo": "bar" }"#.to_string() };
 
         assert_eq!(
             event_to_changeset(&event, ipfs_getter).sql,
@@ -219,14 +220,15 @@ mod tests {
 
     #[test]
     fn test_handle_contract_round_created() {
-        let event = Event {
-            chain_id: 1,
-            address: "0x123".to_string(),
-            block_number: 4242,
-            payload: EventPayload::RoundCreated {
-                round_address: "0x123".to_string(),
-            },
-        };
+        let event =
+            Event {
+                chain_id: 1,
+                address: "0x123".to_string(),
+                block_number: 4242,
+                payload: EventPayload::RoundCreated {
+                    round_address: "0x123".to_string(),
+                },
+            };
 
         let ChangeSet { sql } = event_to_changeset(&event, dummy_ipfs_getter);
         assert_eq!(
