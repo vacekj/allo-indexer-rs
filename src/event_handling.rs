@@ -1,6 +1,9 @@
 use sea_query::{Expr, Iden, PostgresQueryBuilder, Query};
 use tokio_postgres::{Client, Error, NoTls, Transaction};
 
+use crate::event_log::EventLog;
+
+// TODO add round table
 pub const DB_SCHEMA: &str = r#"
    CREATE TABLE project (
      chain_id INTEGER NOT NULL,
@@ -135,25 +138,31 @@ pub fn event_to_changeset(event: &Event, ipfs: IpfsGetter) -> ChangeSet {
     }
 }
 
+pub async fn events_to_change_sets_sequential(
+    events: &[Event],
+    ipfs_getter: IpfsGetter,
+) -> Vec<ChangeSet> {
+    events
+        .iter()
+        .map(|event: &Event| -> ChangeSet { event_to_changeset(event, ipfs_getter) })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn dummy_ipfs_getter(_cid: &str) -> String {
-        "".to_string()
-    }
+    use crate::event_log::InMemoryEventLog;
 
     #[test]
     fn test_handle_project_created() {
-        let event =
-            Event {
-                chain_id: 1,
-                address: "0x123".to_string(),
-                block_number: 4242,
-                payload: EventPayload::ProjectCreated {
-                    project_id: "proj-123".to_string(),
-                },
-            };
+        let event = Event {
+            chain_id: 1,
+            address: "0x123".to_string(),
+            block_number: 4242,
+            payload: EventPayload::ProjectCreated {
+                project_id: "proj-123".to_string(),
+            },
+        };
 
         assert_eq!(
             event_to_changeset(&event, dummy_ipfs_getter).sql,
@@ -220,20 +229,62 @@ mod tests {
 
     #[test]
     fn test_handle_contract_round_created() {
-        let event =
-            Event {
-                chain_id: 1,
-                address: "0x123".to_string(),
-                block_number: 4242,
-                payload: EventPayload::RoundCreated {
-                    round_address: "0x123".to_string(),
-                },
-            };
+        let event = Event {
+            chain_id: 1,
+            address: "0x123".to_string(),
+            block_number: 4242,
+            payload: EventPayload::RoundCreated {
+                round_address: "0x123".to_string(),
+            },
+        };
 
         let ChangeSet { sql } = event_to_changeset(&event, dummy_ipfs_getter);
         assert_eq!(
             sql,
             r#"INSERT INTO "round" ("chain_id", "round_address", "created_at_block") VALUES (1, '0x123', 4242)"#
         );
+    }
+
+    #[tokio::test]
+    async fn test_events_to_change_sets_sequential() -> Result<(), Error> {
+        let events = vec![
+            Event {
+                chain_id: 1,
+                address: "0x123".to_string(),
+                block_number: 4242,
+                payload: EventPayload::ProjectCreated {
+                    project_id: "proj-123".to_string(),
+                },
+            },
+            Event {
+                chain_id: 1,
+                address: "0x123".to_string(),
+                block_number: 4242,
+                payload: EventPayload::MetadataUpdated {
+                    project_id: "proj-123".to_string(),
+                    meta_ptr: MetaPtr {
+                        pointer: "123".to_string(),
+                    },
+                },
+            },
+        ];
+
+        let ipfs_getter = |_cid: &str| -> String { "{ \"foo\": \"bar\" }".to_string() };
+        let change_sets = events_to_change_sets_sequential(&events, ipfs_getter).await;
+
+        assert_eq!(
+            change_sets[0].sql,
+            r#"INSERT INTO "project" ("chain_id", "project_id", "created_at_block") VALUES (1, 'proj-123', 4242)"#
+        );
+        assert_eq!(
+            change_sets[1].sql,
+            r#"UPDATE "project" SET "metadata" = E'{ \"foo\": \"bar\" }' WHERE "chain_id" = 1 AND "project_id" = 'proj-123'"#
+        );
+
+        Ok(())
+    }
+
+    fn dummy_ipfs_getter(_cid: &str) -> String {
+        "".to_string()
     }
 }
