@@ -200,18 +200,10 @@ mod unit_tests {
 mod integration_tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_project_created() -> Result<(), Error> {
-        let ipfs_getter = |_cid: String| -> String { "".to_string() };
-        let events = vec![Event {
-            chain_id: 1,
-            address: "0x123".to_string(),
-            block_number: 4242,
-            payload: EventPayload::ProjectCreated {
-                project_id: "proj-123".to_string(),
-            },
-        }];
-
+    async fn snapshot_test_events(
+        events: Vec<Event>,
+        ipfs_getter: IpfsGetter,
+    ) -> Result<(), Error> {
         let connection_string = "host=localhost user=postgres password=postgres";
         let (mut client, connection) = tokio_postgres::connect(connection_string, NoTls).await?;
         tokio::spawn(connection);
@@ -228,6 +220,21 @@ mod integration_tests {
 
         insta::assert_yaml_snapshot!(value);
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_project_created() -> Result<(), Error> {
+        let ipfs_getter = |_cid: String| -> String { "".to_string() };
+        let events = vec![Event {
+            chain_id: 1,
+            address: "0x123".to_string(),
+            block_number: 4242,
+            payload: EventPayload::ProjectCreated {
+                project_id: "proj-123".to_string(),
+            },
+        }];
+
+        snapshot_test_events(events, ipfs_getter).await?
     }
 
     #[tokio::test]
